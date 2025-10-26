@@ -1,137 +1,152 @@
-// Заготовка для APB testbench
+`timescale 1ns/1ps
 module TB;
 
-    logic        pclk;
-    logic        presetn;
-    logic        psel;
-    logic        penable;
-    logic        pwrite;
+    logic pclk;
+    logic presetn;
+    logic psel;
+    logic penable;
+    logic pwrite;
     logic [31:0] paddr;
     logic [31:0] pwdata;
-
-    wire  [31:0] prdata;
-    wire         pready;
-    wire         pslverr;
+    wire [31:0] prdata;
+    wire pready;
+    wire pslverr;
 
     parameter p_device_offset = 32'h7000_0000;
 
+    // wires for convenience
     logic [31:0] address;
     logic [31:0] data_to_device;
     logic [31:0] data_from_device;
 
-    // DUT
+    logic [31:0] my_group_number;
+    logic [31:0] my_date_ddmmyyyy;
+    logic [31:0] my_surname_4;
+    logic [31:0] my_name_4;
+
+    // instantiate DUT
     apb_slave DUT (
-        .pclk(pclk),        // синхросигнал
-        .presetn(presetn),  // сигнал сброса (инверсный)
-        .paddr(paddr),      // адрес обращения
-        .pwdata(pwdata),    // данные для записи
-        .psel(psel),        // признак выбора устройства
-        .penable(penable),  // признак активной транзакции
-        .pwrite(pwrite),    // признак операции записи
-        .pready(pready),    // признак готовности от устройства
-        .pslverr(pslverr),  // опциональный сигнал: ошибка при обращении
-        .prdata(prdata)     // прочитанные данные
+        .pclk(pclk),
+        .presetn(presetn),
+        .paddr(paddr),
+        .pwdata(pwdata),
+        .psel(psel),
+        .penable(penable),
+        .pwrite(pwrite),
+        .pready(pready),
+        .pslverr(pslverr),
+        .prdata(prdata)
     );
 
-    // -----------------------------
-    // APB write task
-    // -----------------------------
-    task apb_write(input [31:0] addr, input [31:0] data);
-        wait ((penable == 0) && (pready == 0));
-        @(posedge pclk);
-        psel   <= 1'b1;
-        paddr  <= addr;
-        pwdata <= data;
-        pwrite <= 1'b1;
-
-        @(posedge pclk);
-        penable <= 1'b1;
-
-        @(posedge pclk);
-        wait (pready == 1'b1);
-
-        @(posedge pclk);
-        psel    <= 1'b0;
-        penable <= 1'b0;
-        pwrite  <= 1'b0;
-
-        @(posedge pclk);
+    // write task
+    task automatic apb_write(input logic [31:0] addr, input logic [31:0] data);
+        begin
+            wait ((penable==0) && (pready == 0));
+            @(posedge pclk);
+            psel = 1'b1;
+            paddr = addr;
+            pwdata = data;
+            pwrite = 1'b1;
+            @(posedge pclk);
+            penable = 1'b1;
+            @(posedge pclk);
+            wait (pready == 1'b1);
+            @(posedge pclk);
+            psel = 1'b0;
+            penable = 1'b0;
+            pwrite = 1'b0;
+            @(posedge pclk);
+        end
     endtask
 
-    // -----------------------------
-    // APB read task
-    // -----------------------------
-    task apb_read(input [31:0] addr, output logic [31:0] data);
-        wait ((penable == 0) && (pready == 0));
-        @(posedge pclk);
-        psel   <= 1'b1;
-        pwrite <= 1'b0;
-        paddr  <= addr;
+    // read task
+    task automatic apb_read(input logic [31:0] addr, output logic [31:0] data);
+    begin
+        // Начальное состояние
+        psel    = 1'b1;
+        pwrite  = 1'b0;
+        paddr   = addr;
+        penable = 1'b0;
 
-        @(posedge pclk);
-        penable <= 1'b1;
+        @(posedge pclk);        // Ждём фронта тактового сигнала
+        penable = 1'b1;         // Включаем транзакцию
 
-        @(posedge pclk);
+        // Ждём готовности slave
         wait (pready == 1'b1);
+        @(posedge pclk);        // Синхронизация с фронтом
 
+        // Считываем данные
+        data = prdata;
+        $display("[TB] Read data=0x%h from addr=0x%h at time %0t", data, addr, $time);
+
+        // Завершаем транзакцию
+        penable = 1'b0;
+        psel    = 1'b0;
         @(posedge pclk);
-        data <= prdata;
-
-        psel    <= 1'b0;
-        penable <= 1'b0;
-
-        @(posedge pclk);
+    end
     endtask
 
-    // -----------------------------
-    // Clock generation
-    // -----------------------------
-    always #10ns pclk = ~pclk;
+    // clock
+    always #10 pclk = ~pclk;
 
-    // -----------------------------
-    // Stimulus
-    // -----------------------------
     initial begin
-        pclk    = 0;
+        pclk = 0;
         presetn = 1'b1;
+        psel = 1'b0;
+        penable = 1'b0;
+        pwrite = 1'b0;
+        paddr = 32'h0;
+        pwdata = 32'h0;
 
-        psel    = '0;
-        penable = '0;
-        pwrite  = '0;
-        paddr   = '0;
-        pwdata  = '0;
-
+        // reset sequence
         repeat (5) @(posedge pclk);
         presetn = 1'b0;
-
         repeat (5) @(posedge pclk);
         presetn = 1'b1;
-
         repeat (5) @(posedge pclk);
 
-        address        = p_device_offset + 0;
-        data_to_device = 32'h1234_5678;
-        apb_write(address, data_to_device);
-        apb_read(address, data_from_device);
-        $display("Addr=0x%h, write data=0x%h, read data=0x%h",
-                 address, data_to_device, data_from_device);
+        // Your data:
+        // номер в списке группы:
+        my_group_number    = 32'd23;
+        my_date_ddmmyyyy   = 32'd26102025;
+        // Первые 4 буквы фамилии "CHEH" в ASCII
+        my_surname_4       = {8'h43, 8'h48, 8'h49, 8'h4E}; // "CHIN"
+        // Первые 4 буквы имени "IGOR" в ASCII
+        my_name_4          = {8'h49, 8'h47, 8'h4F, 8'h52}; // "IGOR"
 
-        data_to_device = 32'h1;
-        apb_write(address, data_to_device);
+        // Адреса:
+        address = p_device_offset + 32'h0;
+        // Запись номера в группу
+        apb_write(address, my_group_number);
         apb_read(address, data_from_device);
-        $display("Addr=0x%h, write data=0x%h, read data=0x%h",
-                 address, data_to_device, data_from_device);
+        $display("Addr=0x%h, wrote group number=0x%h, read=0x%h", address, my_group_number, data_from_device);
+
+        // Запись даты
+        address = p_device_offset + 32'h4;
+        apb_write(address, my_date_ddmmyyyy);
+        apb_read(address, data_from_device);
+        $display("Addr=0x%h, wrote date(DDMMYYYY)=0x%h, read=0x%h", address, my_date_ddmmyyyy, data_from_device);
+
+        // Запись фамилии (4 ASCII)
+        address = p_device_offset + 32'h8;
+        apb_write(address, my_surname_4);
+        apb_read(address, data_from_device);
+        $display("Addr=0x%h, wrote surname4=0x%h, read=0x%h", address, my_surname_4, data_from_device);
+
+        // Запись имени (4 ASCII)
+        address = p_device_offset + 32'hC;
+        apb_write(address, my_name_4);
+        apb_read(address, data_from_device);
+        $display("Addr=0x%h, wrote name4=0x%h, read=0x%h", address, my_name_4, data_from_device);
 
         repeat (10) @(posedge pclk);
-        $stop();
+        $display("Simulation finished.");
+        $stop;
     end
 
-    // -----------------------------
-    // Monitor
-    // -----------------------------
     initial begin
-        $monitor("APB IF state: PENABLE=%b PREADY=%b PADDR=0x%h PWDATA=0x%h PRDATA=0x%h",
-                 penable, pready, paddr, pwdata, prdata);
+        $monitor("T=%0t PENABLE=%b PREADY=%b PADDR=0x%h PWDATA=0x%h PRDATA=0x%h PSLVERR=%b", $time, penable, pready, paddr, pwdata, prdata, pslverr);
     end
 
 endmodule
+
