@@ -51,14 +51,13 @@ begin
 end
 else
 begin
-    // Конечный автомат APB протокола
+        // Конечный автомат APB протокола
     case(apb_st)
         APB_SETUP:
         begin: apb_setup_st
             // Очистка выходных сигналов
             prdata <= '0;
             pready <= 1'b0;
-            pslverr <= 1'b0;
             
             // Переход в состояние ENABLE при выборе устройства
             // Проверка условий: psel=1 и penable=0
@@ -71,6 +70,18 @@ begin
                     apb_st <= APB_R_ENABLE; // Чтение
             end
         end
+
+        APB_W_ENABLE:
+        begin: apb_w_en_st
+            // Проверка условий для операции записи
+            if (psel && pwrite)
+            begin
+                pready <= 1'b1; // Установка готовности
+                $display("APB_W_ENABLE: writing addr=0x%h data=0x%h", paddr, pwdata);
+                // Декодирование адреса и запись в соответствующий регистр
+                case (paddr[7:0]) // Используем младшие 8 бит адреса
+                    8'h0: begin
+                        // Запись в регистр по смещению 0
 
         APB_W_ENABLE:
         begin: apb_w_en_st
