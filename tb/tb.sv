@@ -109,7 +109,7 @@ module TB;
         // номер в списке группы:
         my_group_number    = 32'd23;
         my_date_ddmmyyyy   = 32'd26102025;
-        // Первые 4 буквы фамилии "CHEH" в ASCII
+        // Первые 4 буквы фамилии "CHIN" в ASCII
         my_surname_4       = {8'h43, 8'h48, 8'h49, 8'h4E}; // "CHIN"
         // Первые 4 буквы имени "IGOR" в ASCII
         my_name_4          = {8'h49, 8'h47, 8'h4F, 8'h52}; // "IGOR"
