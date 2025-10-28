@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Compiling..."
-iverilog -g2012 -o tb.bin rtl/apb_slave.sv tb/tb_apb.sv
+iverilog -g2012 -o tb.bin apb_slave/apb_slave.sv tb/tb.sv
 if [ $? -eq 0 ]; then
   echo "Compilation OK, running simulation:"
   vvp tb.bin
